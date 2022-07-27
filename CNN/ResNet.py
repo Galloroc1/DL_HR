@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
-from .core import BaseCNN, LAYER_PARAMS_DICT
+from .core import BaseCNN
+from .utils import LAYER_PARAMS_DICT
 
 
 class ResNet(BaseCNN):
