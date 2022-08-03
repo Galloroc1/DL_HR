@@ -35,6 +35,7 @@ for data in tqdm(train_loader):
     loss_image.append(loss.cpu().detach().numpy())
     optimizer.step()
     optimizer.zero_grad()
+    break
 
 model_predict = VGG(depth=16, train=False).cuda()
 model_predict.load_state_dict(model.state_dict())

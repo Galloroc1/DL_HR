@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import logging
-from .utils import model_urls
+from .utils import MODEL_URLS
 import os
 
 
@@ -34,7 +34,7 @@ class BaseCNN(nn.Module):
             fine_tuning : bool , is keep base layer's
         """
         from torch.hub import load_state_dict_from_url
-        url = model_urls[self.NAME][str(self.depth)]
+        url = MODEL_URLS[self.NAME][str(self.depth)]
         model_dir = os.path.join(os.path.abspath(".."), "model_params")
         if not os.path.exists(model_dir):
             os.makedirs(model_dir)

@@ -48,7 +48,7 @@ class VGG(BaseCNN):
                 if self.train:
                     self.classifier.add_module(str(ind), torch.nn.Dropout(p=v, inplace=False))
                 else:
-                    self.classifier.add_module(str(ind), torch.nn.Dropout(p=0))
+                    self.classifier.add_module(str(ind), torch.nn.Dropout(p=0, inplace=False))
             elif k[0] == 'a':
                 self.classifier.add_module(str(ind), torch.nn.ReLU(inplace=True))
             else:
