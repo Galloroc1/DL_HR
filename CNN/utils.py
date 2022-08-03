@@ -1,13 +1,14 @@
-vgg_model_urls = {
-    '11': 'https://download.pytorch.org/models/vgg11-8a719046.pth',
-    '13': 'https://download.pytorch.org/models/vgg13-19584684.pth',
-    '16': 'https://download.pytorch.org/models/vgg16-397923af.pth',
-    '19': 'https://download.pytorch.org/models/vgg19-dcbb9e9d.pth',
-    '11_bn': 'https://download.pytorch.org/models/vgg11_bn-6002323d.pth',
-    '13_bn': 'https://download.pytorch.org/models/vgg13_bn-abd245e5.pth',
-    '16_bn': 'https://download.pytorch.org/models/vgg16_bn-6c64b313.pth',
-    '19_bn': 'https://download.pytorch.org/models/vgg19_bn-c79401a0.pth',
-}
+MODEL_URLS = {
+    "vgg": {
+        '11': 'https://download.pytorch.org/models/vgg11-8a719046.pth',
+        '13': 'https://download.pytorch.org/models/vgg13-19584684.pth',
+        '16': 'https://download.pytorch.org/models/vgg16-397923af.pth',
+        '19': 'https://download.pytorch.org/models/vgg19-dcbb9e9d.pth',
+        '11_bn': 'https://download.pytorch.org/models/vgg11_bn-6002323d.pth',
+        '13_bn': 'https://download.pytorch.org/models/vgg13_bn-abd245e5.pth',
+        '16_bn': 'https://download.pytorch.org/models/vgg16_bn-6c64b313.pth',
+        '19_bn': 'https://download.pytorch.org/models/vgg19_bn-c79401a0.pth',
+    }}
 
 LAYER_PARAMS_DICT = {
 
@@ -48,6 +49,11 @@ LAYER_PARAMS_DICT = {
                      {"BasicBlock": [[1024, 512, 2048]] + [[2048, 512, 2048]] * 3, 'down_sample': True,
                       'down_sample_stride': 2},
                      ],
+               "head": {"conv1": [64, 7, 2, 3], 'bn1': 64, 'relu': True, "maxpool": [3, 2, 1]},
+               "tail": {18: {"in_channel": 512, "out_channel": 1000}, 34: {"in_channel": 512, "out_channel": 1000},
+                        50: {"in_channel": 2048, "out_channel": 1000}, 101: {"in_channel": 2048, "out_channel": 1000},
+                        152: {"in_channel": 2048, "out_channel": 1000}},
+
                },
     "vgg": {
         11: {"conv1": [64], "pool1": 'M', "conv2": [128], "pool2": "M", "conv3": [256, 256], "pool3": "M",
@@ -59,8 +65,9 @@ LAYER_PARAMS_DICT = {
         19: {"conv1": [64, 64], "pool1": 'M', "conv2": [128, 128], "pool2": "M", "conv3": [256, 256, 256, 256],
              "pool3": "M", "conv4": [512, 512, 512, 512], "pool4": "M", "conv5": [512, 512, 512, 512],
              "pool5": "M"},
-        'fc_params': {"linear1": [25088, 4096],'activation1':True, "drop1": True, "linear2": [4096, 4096], 'activation2':True, "drop2": True,
-                      "linear3": [4096, 1000]}
+        'fc_params': {"linear1": [25088, 4096], 'activation1': True, "drop1": 0, "linear2": [4096, 4096],
+                      'activation2': True, "drop2": 0,
+                      "linear3": [4096, 10]}
 
     }
 
