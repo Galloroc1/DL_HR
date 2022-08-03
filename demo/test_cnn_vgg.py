@@ -12,7 +12,7 @@ dataset_transform = torchvision.transforms.Compose([torchvision.transforms.ToTen
                                                     torchvision.transforms.Resize(224)])
 train_set = torchvision.datasets.CIFAR10(root="./data", train=True, transform=dataset_transform, download=True)
 test_set = torchvision.datasets.CIFAR10(root="./data", train=False, transform=dataset_transform, download=True)
-batch_size = 32
+batch_size = 64
 train_loader = torch.utils.data.DataLoader(dataset=train_set,
                                            batch_size=batch_size,
                                            shuffle=True)
@@ -21,12 +21,13 @@ test_loader = torch.utils.data.DataLoader(dataset=test_set,
                                           shuffle=True)
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
-model = VGG().cuda()
+model = VGG(depth=16, train=True).cuda()
 model.load_state_dict_(drop_key_lens=3, fine_tuning=True)
 
 loss_func = torch.nn.CrossEntropyLoss()
 optimizer = torch.optim.Adam(lr=0.01, params=model.parameters())
 loss_image = []
+epoch = 1
 for data in tqdm(train_loader):
     score = model.forward(data[0].cuda())
     loss = loss_func(score, data[1].cuda())
@@ -34,19 +35,22 @@ for data in tqdm(train_loader):
     loss_image.append(loss.cpu().detach().numpy())
     optimizer.step()
     optimizer.zero_grad()
-    # pred = torch.argmax(score, dim=1)
 
-# from matplotlib import pyplot as plt
-# plt.figure()
-# plt.plot(range(len(loss_image)),loss_image,color='red')
-# plt.show()
+model_predict = VGG(depth=16, train=False).cuda()
+model_predict.load_state_dict(model.state_dict())
 
 prt = 0
 total = 0
 for data in tqdm(test_loader):
     test_input, test_label = data
-    test_output = model.forward(test_input.cuda())
+    test_output = model_predict.forward(test_input.cuda())
     total += 1
     if torch.argmax(test_output, dim=1) == test_label.cuda():
         prt += 1
 print("accuracy=\t", prt / total)
+# pred = torch.argmax(score, dim=1)
+
+# from matplotlib import pyplot as plt
+# plt.figure()
+# plt.plot(range(len(loss_image)),loss_image,color='red')
+# plt.show()

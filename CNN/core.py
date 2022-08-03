@@ -8,9 +8,11 @@ import os
 class BaseCNN(nn.Module):
     NAME = "Base"
 
-    def __init__(self, depth: int) -> None:
+    def __init__(self, depth: int, pretrain: bool = False, train: bool = False) -> None:
         super(BaseCNN, self).__init__()
         self.depth = depth
+        self.pretrain = pretrain
+        self.train = train
         self.input_channel = 3
 
     def forward(self, x):

@@ -6,12 +6,12 @@ from .core import BaseCNN
 class VGG(BaseCNN):
     NAME = 'vgg'
 
-    def __init__(self, depth: int = 16) -> None:
+    def __init__(self, depth: int = 16, pretrain: bool = False, train: bool = False) -> None:
         """
         :param depth: depth of vgg net,include:[11,13,16,19]
         """
         assert depth in LAYER_PARAMS_DICT[self.NAME].keys(), 'not support depth'
-        super(VGG, self).__init__(depth=depth)
+        super(VGG, self).__init__(depth=depth, pretrain=pretrain, train=train)
         self.feature_params = LAYER_PARAMS_DICT[self.NAME][self.depth]
         self.features = torch.nn.Sequential()
 
@@ -45,7 +45,10 @@ class VGG(BaseCNN):
             if k[0] == 'l':
                 self.classifier.add_module(str(ind), torch.nn.Linear(v[0], v[1], bias=True))
             elif k[0] == 'd':
-                if v: self.classifier.add_module(str(ind), torch.nn.Dropout(p=0, inplace=False))
+                if self.train:
+                    self.classifier.add_module(str(ind), torch.nn.Dropout(p=v, inplace=False))
+                else:
+                    self.classifier.add_module(str(ind), torch.nn.Dropout(p=0))
             elif k[0] == 'a':
                 self.classifier.add_module(str(ind), torch.nn.ReLU(inplace=True))
             else:

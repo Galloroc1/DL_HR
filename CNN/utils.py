@@ -60,7 +60,8 @@ LAYER_PARAMS_DICT = {
         19: {"conv1": [64, 64], "pool1": 'M', "conv2": [128, 128], "pool2": "M", "conv3": [256, 256, 256, 256],
              "pool3": "M", "conv4": [512, 512, 512, 512], "pool4": "M", "conv5": [512, 512, 512, 512],
              "pool5": "M"},
-        'fc_params': {"linear1": [25088, 4096],'activation1':True, "drop1": True, "linear2": [4096, 4096], 'activation2':True, "drop2": True,
+        'fc_params': {"linear1": [25088, 4096], 'activation1': True, "drop1": 0.8, "linear2": [4096, 4096],
+                      'activation2': True, "drop2": 0.8,
                       "linear3": [4096, 1000]}
 
     }
