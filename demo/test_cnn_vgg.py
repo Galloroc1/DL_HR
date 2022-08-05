@@ -23,7 +23,9 @@ test_loader = torch.utils.data.DataLoader(dataset=test_set,
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 model = VGG(depth=16, train=True).cuda()
 model.load_state_dict_(drop_key_lens=3, fine_tuning=True)
-
+# for k,v in enumerate(model.parameters()):
+#     print(v.requires_grad)
+# input()
 loss_func = torch.nn.CrossEntropyLoss()
 optimizer = torch.optim.Adam(lr=0.01, params=model.parameters())
 loss_image = []
@@ -35,7 +37,6 @@ for data in tqdm(train_loader):
     loss_image.append(loss.cpu().detach().numpy())
     optimizer.step()
     optimizer.zero_grad()
-    break
 
 model_predict = VGG(depth=16, train=False).cuda()
 model_predict.load_state_dict(model.state_dict())

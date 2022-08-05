@@ -8,6 +8,13 @@ MODEL_URLS = {
         '13_bn': 'https://download.pytorch.org/models/vgg13_bn-abd245e5.pth',
         '16_bn': 'https://download.pytorch.org/models/vgg16_bn-6c64b313.pth',
         '19_bn': 'https://download.pytorch.org/models/vgg19_bn-c79401a0.pth',
+    },
+    "resnet": {
+        '18': "https://download.pytorch.org/models/resnet18-f37072fd.pth",
+        '34': "https://download.pytorch.org/models/resnet34-b627a593.pth",
+        '50': "https://download.pytorch.org/models/resnet50-0676ba61.pth",
+        '101': "https://download.pytorch.org/models/resnet101-63fe2227.pth",
+        '152': "https://download.pytorch.org/models/resnet152-394f9c45.pth"
     }}
 
 LAYER_PARAMS_DICT = {
@@ -67,7 +74,7 @@ LAYER_PARAMS_DICT = {
              "pool5": "M"},
         'fc_params': {"linear1": [25088, 4096], 'activation1': True, "drop1": 0, "linear2": [4096, 4096],
                       'activation2': True, "drop2": 0,
-                      "linear3": [4096, 10]}
+                      "linear3": [4096, 1000]}
 
     }
 
