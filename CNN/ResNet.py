@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 from .core import BaseCNN
 from .utils import LAYER_PARAMS_DICT
+from copy import deepcopy
 
 
 class ResNet(BaseCNN):
@@ -22,18 +23,19 @@ class ResNet(BaseCNN):
         assert depth in LAYER_PARAMS_DICT[
             self.NAME].keys(), f'not support depth ,we just support {LAYER_PARAMS_DICT[self.NAME].keys()}'
         super(ResNet, self).__init__(depth=depth, pretrain=pretrain, train=train)
-        self.layer_params = LAYER_PARAMS_DICT[self.NAME][self.depth]
+        self.layer_params = deepcopy(LAYER_PARAMS_DICT[self.NAME][self.depth])
+
         self.tail_params = LAYER_PARAMS_DICT[self.NAME]['tail'][self.depth]
         self.avg_pool = torch.nn.AvgPool2d(kernel_size=7)
-        self.fc = torch.nn.Linear(self.tail_params["in_channel"], self.tail_params['out_channel'])
         self.build_model()
+        self.fc = torch.nn.Linear(self.tail_params["in_channel"], self.tail_params['out_channel'])
 
     def build_model(self):
         # build head
         for k, v in self.HEAD_LAYER.items():
             if k[0] == "c":
                 setattr(self, k, torch.nn.Conv2d(in_channels=self.input_channel, out_channels=v[0], kernel_size=v[1],
-                                                 stride=v[2], padding=v[3]))
+                                                 stride=v[2], padding=v[3], bias=False))
             elif k[0] == 'b':
                 setattr(self, k, torch.nn.BatchNorm2d(v))
             elif k[0] == 'r':
@@ -63,7 +65,8 @@ class ResNet(BaseCNN):
                     v['down_sample_stride'] = 1 if v['down_sample'] else v['down_sample_stride']
 
     def forward(self, x):
-        x = self.sequential(x)
+        x = self.maxpool(self.relu(self.bn1(self.conv1(x))))
+        x = self.layer4(self.layer3(self.layer2(self.layer1(x))))
         x = self.avg_pool(x)
         x = torch.flatten(x, 1)
         x = self.fc(x)
@@ -90,7 +93,7 @@ class BasicBlock(nn.Module):
             self.downsample = torch.nn.Sequential()
             self.downsample.add_module("0", torch.nn.Conv2d(in_channels=input_channel, out_channels=output_channel,
                                                             kernel_size=1,
-                                                            stride=stride, padding=0))
+                                                            stride=stride, padding=0, bias=False))
             self.downsample.add_module("1", torch.nn.BatchNorm2d(output_channel))
         self.is_down_sample = down_sample
 
@@ -101,10 +104,10 @@ class BasicBlock(nn.Module):
         """
         identity = x
         # if not down_sample,just add x
-        identity = self.down_sample_layer(identity) if self.is_down_sample else identity
+        identity = self.downsample(identity) if self.is_down_sample else identity
         # todo : why bn before conv or after conv
-        x = self.activation1(self.bn1(self.conv1(x)))
-        x = self.activation2(self.bn2(self.conv2(x)) + identity)
+        x = self.relu(self.bn1(self.conv1(x)))
+        x = self.bn2(self.conv2(x)) + identity
         return x
 
 
@@ -113,7 +116,7 @@ class Bottleneck(nn.Module):
                  down_sample: bool = False,
                  down_sample_size: int = 1):
         super(Bottleneck, self).__init__()
-
+        down_sample_size = down_sample_size if down_sample else 1
         # layer1
         self.conv1 = torch.nn.Conv2d(in_channels=input_channel, out_channels=mid_channel, kernel_size=1,
                                      stride=1, padding=0, bias=False)
@@ -134,7 +137,7 @@ class Bottleneck(nn.Module):
             self.downsample = torch.nn.Sequential()
             self.downsample.add_module("0", torch.nn.Conv2d(in_channels=input_channel, out_channels=output_channel,
                                                             kernel_size=1,
-                                                            stride=down_sample_size, padding=0))
+                                                            stride=down_sample_size, padding=0, bias=False))
             self.downsample.add_module("1", torch.nn.BatchNorm2d(output_channel))
         # down_sample
 
@@ -147,7 +150,7 @@ class Bottleneck(nn.Module):
         """
         identity = x
         # if not down_sample,just add x
-        identity = self.down_sample_layer(identity) if self.is_down_sample else identity
+        identity = self.downsample(identity) if self.is_down_sample else identity
         # todo : why bn before conv or after conv
         x = self.bn1(self.conv1(x))
         x = self.bn2(self.conv2(x))

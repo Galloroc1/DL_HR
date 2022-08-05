@@ -48,6 +48,9 @@ class BaseCNN(nn.Module):
                 static.pop(i)
         self.load_state_dict(state_dict=static, strict=False)
         if fine_tuning:
+            if drop_key_lens is None:
+                raise ValueError("you can't fine_tuning while you don't want to drop anything")
+            all_lens = sum(1 for i in self.named_parameters())
             for k, v in enumerate(self.parameters()):
-                if k < len(static.keys()):
+                if k < all_lens - drop_key_lens * 2:
                     v.requires_grad = False
