@@ -13,9 +13,3 @@ class BaseSegNet(torch.nn.Module):
 
     def build_model(self):
         raise
-
-    def detail(self, is_print=False):
-        for i in self.sequential:
-            logging.log(1, i)
-            print(i) if is_print else None
-
