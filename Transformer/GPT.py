@@ -25,11 +25,10 @@ class RMSNorm(torch.nn.Module):
 
 def precompute_freqs_cis(dim: int, end: int, theta: float = 10000.0):
     freqs = 1.0 / (theta ** (torch.arange(0, dim, 2)[: (dim // 2)].float() / dim))
-    t = torch.arange(end, device=freqs.device)  # type: ignore
-    freqs = torch.outer(t, freqs).float()  # type: ignore
-    freqs_cos = torch.cos(freqs)  # real part
-    freqs_sin = torch.sin(freqs)  # imaginary part
-    return freqs_cos, freqs_sin
+    t = torch.arange(end, device=freqs.device, dtype=torch.float32)
+    freqs = torch.outer(t, freqs)
+    freqs_cis = torch.polar(torch.ones_like(freqs), freqs)  # complex64
+    return freqs_cis
 
 
 def reshape_for_broadcast(freqs_cis: torch.Tensor, x: torch.Tensor):
@@ -41,29 +40,15 @@ def reshape_for_broadcast(freqs_cis: torch.Tensor, x: torch.Tensor):
 
 
 def apply_rotary_emb(
-        xq: torch.Tensor,
-        xk: torch.Tensor,
-        freqs_cos: torch.Tensor,
-        freqs_sin: torch.Tensor
+    xq: torch.Tensor,
+    xk: torch.Tensor,
+    freqs_cis: torch.Tensor,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
-    # reshape xq and xk to match the complex representation
-    xq_r, xq_i = xq.float().reshape(xq.shape[:-1] + (-1, 2)).unbind(-1)
-    xk_r, xk_i = xk.float().reshape(xk.shape[:-1] + (-1, 2)).unbind(-1)
-
-    # reshape freqs_cos and freqs_sin for broadcasting
-    freqs_cos = reshape_for_broadcast(freqs_cos, xq_r)
-    freqs_sin = reshape_for_broadcast(freqs_sin, xq_r)
-
-    # apply rotation using real numbers
-    xq_out_r = xq_r * freqs_cos - xq_i * freqs_sin
-    xq_out_i = xq_r * freqs_sin + xq_i * freqs_cos
-    xk_out_r = xk_r * freqs_cos - xk_i * freqs_sin
-    xk_out_i = xk_r * freqs_sin + xk_i * freqs_cos
-
-    # flatten last two dimensions
-    xq_out = torch.stack([xq_out_r, xq_out_i], dim=-1).flatten(3)
-    xk_out = torch.stack([xk_out_r, xk_out_i], dim=-1).flatten(3)
-
+    xq_ = torch.view_as_complex(xq.float().reshape(*xq.shape[:-1], -1, 2))
+    xk_ = torch.view_as_complex(xk.float().reshape(*xk.shape[:-1], -1, 2))
+    freqs_cis = reshape_for_broadcast(freqs_cis, xq_)
+    xq_out = torch.view_as_real(xq_ * freqs_cis).flatten(3)
+    xk_out = torch.view_as_real(xk_ * freqs_cis).flatten(3)
     return xq_out.type_as(xq), xk_out.type_as(xk)
 
 
@@ -85,17 +70,14 @@ class Attention(nn.Module):
             mask = torch.triu(mask, diagonal=1)
             self.register_buffer("mask", mask)
 
-    def forward(self, x,
-                freqs_cos: torch.Tensor,
-                freqs_sin: torch.Tensor, ):
+    def forward(self, x, freqs_cis : torch.Tensor):
         bs, seqlen = x.shape[0], x.shape[1]
         q, k, v = self.wq(x), self.wk(x), self.wv(x)
         q = q.view(bs, seqlen, self.n_heads, self.head_dim)
         k = k.view(bs, seqlen, self.n_heads, self.head_dim, )
         v = v.view(bs, seqlen, self.n_heads, self.head_dim, )
 
-        xq, xk = apply_rotary_emb(q, k, freqs_cos, freqs_sin)
-
+        xq, xk = apply_rotary_emb(q, k, freqs_cis )
         xq = xq.transpose(1, 2)  # (bs, n_local_heads, seqlen, head_dim)
         xk = xk.transpose(1, 2)
         xv = v.transpose(1, 2)
@@ -142,9 +124,9 @@ class TransformerBlock(nn.Module):
         self.ffn = FeedForward(args)
         self.ffn_rms = RMSNorm(args.dim, args.norm_eps)
 
-    def forward(self, x, freqs_cos, freqs_sin):
+    def forward(self, x, freqs_cis):
         x = self.attention_rms(x)
-        x = x + self.attention(x, freqs_cos, freqs_sin)
+        x = x + self.attention(x, freqs_cis)
         x = self.ffn_rms(x)
         x = x + self.ffn(x)
         return x
@@ -166,18 +148,16 @@ class TransformerDecoderOnly(nn.Module):
         self.init_rope()
 
     def init_rope(self):
-        freqs_cos, freqs_sin = precompute_freqs_cis(self.params.dim // self.params.n_heads, self.params.max_seq_len)
-        self.register_buffer("freqs_cos", freqs_cos, persistent=False)
-        self.register_buffer("freqs_sin", freqs_sin, persistent=False)
+        freqs_cis= precompute_freqs_cis(self.params.dim // self.params.n_heads, self.params.max_seq_len)
+        self.register_buffer("freqs_cis", freqs_cis, persistent=False)
 
     def forward(self, tokens):
         bsz, seqlen = tokens.shape
-        freqs_cos = self.freqs_cos[:seqlen]
-        freqs_sin = self.freqs_sin[:seqlen]
+        freqs_cis = self.freqs_cis[: seqlen]
 
         x = self.embedding(tokens)
         for layer in self.Decoder:
-            x = layer(x, freqs_cos, freqs_sin)
+            x = layer(x, freqs_cis)
         x = self.rms(x)
         logits = self.output(x)
         return logits
@@ -186,7 +166,7 @@ class TransformerDecoderOnly(nn.Module):
 if __name__ == '__main__':
     params = ModelArgs()
     model = TransformerDecoderOnly(params)
-    data = torch.range(0, 49).unsqueeze(0).to(torch.long)
+    data = torch.range(0, 9).unsqueeze(0).to(torch.long)
     print(model)
     result = model.forward(data)
     print(result.shape)
