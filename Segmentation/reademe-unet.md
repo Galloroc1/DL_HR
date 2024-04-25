@@ -1,4 +1,4 @@
 just for test
 
 - [x] u-net
-- [] other model
+- [x] other model
