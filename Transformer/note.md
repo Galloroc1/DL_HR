@@ -27,10 +27,34 @@
     其中k是token的绝对位置，i是该token的embedding向量的索引。
     即一个sentences表示为[512,1024]，其中512是2k的取值范围，1024是i的取值范围。
     
-    问题：是否满足上述位置编码需要解决的几个条件
-        对于1：满足。位置信息直接嵌入。
-        对于2、4：满足。省去分量来看，P(i)=sin(i) or cos(i), 不依赖于序列长度，且值有界[-1,1]
-        对于3：满足。有外推性质，当token数增加时，不影响原有的model稳定性
+2、RoPE
+RoPE是绝对位置编码，但是依靠绝对编码的形式嵌入了相对位置信息，主要思想是通过q,k矩阵内积，将相对信息位置嵌入。
+    结论: 编码形式：[x,y] = [x\*cosnθ-y\*sinnθ,x\*sinnθ+y\*cosnθ]
+    证明：如何嵌入相对位置信息进入。
+        假设某个位置m的q的向量为二维向量qm=[xm,ym]，k在n的向量为kn=[xn,yn]
+        假设函数f(qm,m)代表为q嵌入相应位置信息，同理有f(kn,n)
+        目标：<f(qm,m),f(kn,n)> == R(qm,qn,m-n)，即融入位置信息后的qm和kn，在计算内积之后与m-n相关。
+        过程：
+            对于两个二维向量qm,kn，其内积为<qm,qn>，若对于向量qm=[xm,yn]，将x,y表述成复数形式，即x+yi。
+            同理kn也可以表述成复数形式，则有如下等式：
+            <qm,kn>=Re[qm\*kn<sup>*</sup>]，其中kn<sup>*</sup>表示kn的共轭复数，Re表示取实部，证明公式略过。
+            
+            此时，还没有嵌入位置编码，接下来进行嵌入:
+            qm=qm*e<sup>imθ</sup>]，kn同理，那么有<qm,qn>=Re[qm\*kn<sup>*</sup>\*ee<sup>i(m-n)θ</sup>]]
+            则可得加入位置编码后的<f(qm,m),f(kn,n)> == R(qm,qn,m-n)
+            此时，利用绝对位置编码的形式，嵌入了相对信息。
+            
+            矩阵表示：
+            对于qm*e<sup>imθ</sup>=(x+yi)*e<sup>imθ
+            e<sup>imθ=cosθ+isinθ
+            则(x+yi)*e<sup>imθ=(x+yi)*(cosθ+isinθ)=(xcosθ-ysinθ)+i(xsinθ+ysinθ)
+            转回矩阵表示：
+                [x,y] = [x\*cosnθ-y\*sinnθ,x\*sinnθ+y\*cosnθ]
+        
+        推广：
+            内积满足线性叠加性，因此任意偶数维的RoPE，我们都可以表示为二维情形的拼接，则
+            f(q)=[q0,q1,q2,q3,....,qd-2,qd-1]*[cosmθ0,cosmθ0,....,cosmθd/2-1,cosmθd/2]+
+                [-q1,q0,-q3,q2,....,-qd-1,qd-2]*[sinmθ0,sinmθ0,....,sinmθd/2-1,sinmθd/2]
+            在实际中q矩阵由于是wx求的得，所以可以去除-号。
 
-    问题：只用sin函数行不行，为什么要加cos
-        加入cos是为了嵌入相对位置信息。
+            
