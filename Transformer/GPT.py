@@ -15,7 +15,7 @@ class RMSNorm(torch.nn.Module):
     def __init__(self, dim, eps=1e-5):
         super().__init__()
         self.eps = eps
-        self.weight = torch.nn.Parameter(torch.empty(dim))
+        self.weight = torch.nn.Parameter(torch.ones(dim))
 
     def forward(self, hidden_states: torch.Tensor):
         var = hidden_states.pow(2).mean(-1, keepdim=True) + self.eps
@@ -106,7 +106,7 @@ class Attention(nn.Module):
             assert hasattr(self, 'mask')
             scores = scores + self.mask[:, :, :seqlen, :seqlen]  # (bs, n_local_heads, seqlen, cache_len + seqlen)
             scores = F.softmax(scores.float(), dim=-1).type_as(xq)
-            scores = self.attn_dropout(scores)
+            # scores = self.attn_dropout(scores)
             output = torch.matmul(scores, xv)  # (bs, n_local_heads, seqlen, head_dim)
 
         # restore time as batch dimension and concat heads
