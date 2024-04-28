@@ -66,11 +66,11 @@
 ​				矩阵表示：
 ​    					对于qm\*e<sup>imθ</sup>=(x+yi)\*e<sup>imθ</sup>
 
-   							e<sup>iθ</sup>=cosθ+isinθ
+​						e<sup>iθ</sup>=cosθ+isinθ
 
-   				 	则(x+yi)\*e<sup>imθ</sup>=(x+yi)\*(cosθ+isinθ)=(xcosθ-ysinθ)+i(xsinθ+ysinθ)
-       			 	转回矩阵表示：
-           				 	[x,y] = [x\*cosnθ-y\*sinnθ,x\*sinnθ+y\*cosnθ]
+​			 	则(x+yi)\*e<sup>imθ</sup>=(x+yi)\*(cosθ+isinθ)=(xcosθ-ysinθ)+i(xsinθ+ysinθ)
+   			 	转回矩阵表示：
+​       				 	[x,y] = [x\*cosnθ-y\*sinnθ,x\*sinnθ+y\*cosnθ]
 
 ​		推广：
 ​        		内积满足线性叠加性，因此任意偶数维的RoPE，我们都可以表示为二维情形的拼接，则
