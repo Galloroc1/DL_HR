@@ -29,6 +29,7 @@ class OutConvBlock(nn.Module):
 encoder block:max_pool->conv2->conv2
 """
 
+
 class DownBlock(nn.Module):
     def __init__(self, in_channels, out_channels):
         super(DownBlock, self).__init__()
@@ -45,6 +46,8 @@ class DownBlock(nn.Module):
 """
 decoder: ConvTranspose2d->conv->conv
 """
+
+
 class UpBlock(nn.Module):
     def __init__(self, in_channels, out_channels):
         super(UpBlock, self).__init__()
@@ -92,7 +95,6 @@ class Unet(nn.Module):
         # out_layer
         out = self.out_conv(u4)
         return out
-
 
 # if __name__ == '__main__':
 #     class_num = 5

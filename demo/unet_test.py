@@ -8,6 +8,7 @@ from tqdm import tqdm
 from Segmentation.UNet import Unet
 import torch.optim as optim
 
+
 def train_model(train_loader, val_loader, model, criterion, optimizer, num_epochs=10, save_path=None):
     """
     Train model
@@ -27,8 +28,6 @@ def train_model(train_loader, val_loader, model, criterion, optimizer, num_epoch
         for inputs, labels in train_loader:
             optimizer.zero_grad()
             outputs = model(inputs)  # 增加一个维度以匹配模型输入的形状
-            print(f"outputs{outputs.shape}")
-            inputs('d')
             loss = criterion(outputs, labels)  # 增加一个维度以匹配标签的形状
             loss.backward()
             optimizer.step()
@@ -36,7 +35,7 @@ def train_model(train_loader, val_loader, model, criterion, optimizer, num_epoch
             running_loss += loss.item()
 
         # 验证模型
-        model.eval()    # 将模型设置为评估模式
+        model.eval()  # 将模型设置为评估模式
         val_loss = 0.0
         with torch.no_grad():
             for inputs, labels in val_loader:
