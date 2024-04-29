@@ -7,7 +7,11 @@ class DoubleConvBlock(nn.Module):
         super(DoubleConvBlock, self).__init__()
         self.double_conv = nn.Sequential(
             nn.Conv2d(in_channels, out_channels, kernel_size=kernel_size, padding='same'),
-            nn.Conv2d(out_channels, out_channels, kernel_size=kernel_size, padding='same'))
+            nn.BatchNorm2d(out_channels),
+            nn.ReLU(),
+            nn.Conv2d(out_channels, out_channels, kernel_size=kernel_size, padding='same'),
+            nn.BatchNorm2d(out_channels),
+            nn.ReLU(),)
 
     def forward(self, x):
         x = self.double_conv(x)
@@ -28,8 +32,6 @@ class OutConvBlock(nn.Module):
 """
 encoder block:max_pool->conv2->conv2
 """
-
-
 class DownBlock(nn.Module):
     def __init__(self, in_channels, out_channels):
         super(DownBlock, self).__init__()
@@ -96,9 +98,9 @@ class Unet(nn.Module):
         out = self.out_conv(u4)
         return out
 
-# if __name__ == '__main__':
-#     class_num = 5
-#     x = torch.randn(8, 3, 512, 512)
-#     model = Unet(class_num, in_channels=x.shape[1])
-#     out = model(x)
-#     print(out.shape)
+if __name__ == '__main__':
+    class_num = 5
+    x = torch.randn(8, 3, 512, 512)
+    model = Unet(class_num, in_channels=x.shape[1])
+    out = model(x)
+    print(out.shape)
