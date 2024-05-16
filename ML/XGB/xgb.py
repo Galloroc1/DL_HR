@@ -1,8 +1,12 @@
 import numpy as np
 import sys
 
+sys.path.append("../../fl")
 from dataclasses import dataclass
 from copy import deepcopy
+from tools import timer_decorator
+
+np.set_printoptions(precision=15)
 
 
 class MseLoss:
@@ -30,13 +34,14 @@ class ModelArgs:
     beta = 0
     alpha = 1
     loss_function = MseLoss
-    max_depth = 5
-    tree_nums = 10
+    max_depth = 6
+    tree_nums = 100
     task_type = "reg"
     lr = 1
     gamma = 0
 
 
+# @timer_decorator
 def get_split_index(gain):
     max_index_flat = np.argmax(gain)
     max_x_index, max_y_index = np.unravel_index(max_index_flat, gain.shape)
@@ -50,30 +55,38 @@ def get_max_gain_left_index(buckets, max_x_index, max_y_index):
     return left_index, right_index
 
 
-def get_left_right_node(x, g, h, G_H, max_x_index, max_y_index, other_features):
+def get_part(x, part):
+    x = x.T[part].reshape((x.shape[1], -1)).T
+    return x
+
+
+# @timer_decorator
+def get_left_right_node(x, mask, g, h, G_H, max_x_index, max_y_index, other_features):
     # todo : may be better
-    ids_left = x[0:max_x_index, max_y_index]
-    ids_right = x[max_x_index:, max_y_index]
+    left_ids_mask = mask[max_x_index, :, max_y_index]
+    right_ids_mask = ~left_ids_mask
 
-    left = np.isin(x, ids_left).T
-    right = ~left
+    ids_left = x[..., max_y_index, 0][left_ids_mask]
+    ids_right = x[..., max_y_index, 0][right_ids_mask]
+    mask_left = np.isin(x[..., 0], ids_left).T
+    mask_right = ~mask_left
 
-    x = x.T
-    x_left = x[left].reshape((x.shape[0], -1)).T
-    x_right = x[right].reshape((x.shape[0], -1)).T
+    x0 = np.expand_dims(get_part(x[..., 0], mask_left), -1)
+    x1 = np.expand_dims(get_part(x[..., 1], mask_left), -1)
+    x_left = np.concatenate((x0, x1), -1)
 
-    g = g.T
-    h = h.T
-    g_left = g[left].reshape((g.shape[0], -1)).T
-    g_right = g[right].reshape((g.shape[0], -1)).T
+    x0 = np.expand_dims(get_part(x[..., 0], mask_right), -1)
+    x1 = np.expand_dims(get_part(x[..., 1], mask_right), -1)
+    x_right = np.concatenate((x0, x1), -1)
 
-    h_left = h[left].reshape((h.shape[0], -1)).T
-    h_right = h[right].reshape((h.shape[0], -1)).T
-
+    g_left = get_part(g, mask_left)
+    g_right = get_part(g, mask_right)
     G_left = np.sum(g_left, axis=0)[0]
-    H_left = np.sum(h_left, axis=0)[0]
-
     G_right = G_H[0] - G_left
+
+    h_left = get_part(h, mask_left)
+    h_right = get_part(h, mask_right)
+    H_left = np.sum(h_left, axis=0)[0]
     H_right = G_H[1] - H_left
     return (ids_left, ids_right,
             [x_left[:, other_features], g_left[:, other_features], h_left[:, other_features], [G_left, H_left]],
@@ -114,24 +127,26 @@ class Node:
             "w": self.w,
             "depth": self.depth,
             "point": self.split_point
-            # "beat": self.beta,
-            # "alpha": self.alpha,
-            # "loss_function": self.loss_function.__name__
         }
         return str(params)
 
     def is_leaf(self, x):
-        return len(x) < self.bucket_num or self.depth == 0 or x.shape[1] <= 1
+        return self.depth == 0 or x.shape[1] <= 1 or x.shape[0] <= 1
 
+    # @timer_decorator
     def split_gain(self, x, g, h, G_H):
-        def func(bucket, item, g, h, G_H):
-            bucket[0:item] = True
-            bucket[item:] = False
+
+        def func1(bucket, item):
+            result = np.empty(bucket.shape[0:2], dtype=bool)
+            for i in range(0, bucket.shape[1]):
+                result[:, i] = bucket[:, i, 1] < bucket[item, i, 1]
+            return result
+
+        def func2(bucket, g, h, G_H):
             G_left = np.sum(g * bucket, axis=0)
             G_right = G_H[0] - G_left
             H_left = np.sum(h * bucket, axis=0)
             H_right = G_H[1] - H_left
-
             gain_left = G_left ** 2 / (H_left + self.alpha)
             gain_right = G_right ** 2 / (H_right + self.alpha)
             gain_l_r = G_H[0] ** 2 / (G_H[1] + self.alpha)
@@ -139,40 +154,37 @@ class Node:
             return gain
 
         bucket_index = [int(x.shape[0] * i / self.bucket_num) for i in range(1, self.bucket_num + 1)][:-1]
-        gain = np.array(list(map(lambda item: func(deepcopy(x), item, g, h, G_H), bucket_index)))
-        return gain, bucket_index
+        mask = np.array(list(map(lambda item: func1(deepcopy(x), item), bucket_index)))
+        gain = np.array(list(map(lambda item: func2(item, g, h, G_H), mask)))
+        return gain, bucket_index, mask
 
     def get_w(self, G_H):
         return - G_H[0] / (G_H[1] + self.alpha)
 
     def train(self, x, g, h, G_H, org_features):
         is_leaf = self.is_leaf(x)
+
         if is_leaf:
             self.w = self.get_w(G_H)
             new_pred = np.zeros(self.pred_shape)
-            new_pred[x[:, 0]] = self.w
+            new_pred[x[:, 0, 0]] = self.w
             return new_pred
         else:
-
-            gains, buckets_index = self.split_gain(x, g, h, G_H)
+            gains, buckets_index, mask = self.split_gain(x, g, h, G_H)
             assert gains.shape == (self.bucket_num - 1, x.shape[1]), f"gain shape is wrong:{gains.shape}"
-
             # find max index and split data
             max_gain, max_gain_x_index, max_gain_y_index = get_split_index(gains)
-            max_buckets_index = buckets_index[max_gain_x_index]
+
             if max_gain > self.gamma:
                 self.left_node = Node(self.depth - 1, self.pred_shape, self.args)
                 self.right_node = Node(self.depth - 1, self.pred_shape, self.args)
-                # del feature
-                other_features, org_features, point_y = del_feature(x.shape[-1], max_gain_y_index,
+                other_features, org_features, point_y = del_feature(x.shape[-2],
+                                                                    max_gain_y_index,
                                                                     org_features)
+                self.split_point = [x[buckets_index[max_gain_x_index], max_gain_y_index, 0], point_y]
 
-                # find the split point index in x
-                self.split_point = [x[max_buckets_index, max_gain_y_index], point_y]
-
-                # split left ids and right ids
-                ids_left, ids_right, left_datas, right_datas = get_left_right_node(x, g, h, G_H,
-                                                                                   max_buckets_index,
+                ids_left, ids_right, left_datas, right_datas = get_left_right_node(x, mask, g, h, G_H,
+                                                                                   max_gain_x_index,
                                                                                    max_gain_y_index,
                                                                                    other_features)
                 left_pred = self.left_node.train(*(left_datas + [deepcopy(org_features)]))
@@ -182,7 +194,7 @@ class Node:
             else:
                 self.w = self.get_w(G_H)
                 new_pred = np.zeros(self.pred_shape)
-                new_pred[x[:, 0]] = self.w
+                new_pred[x[:, 0, 0]] = self.w
                 return new_pred
 
     def predict(self, x):
@@ -224,19 +236,21 @@ class XgboostTree:
     def compute_g_h(self, x, y, pred):
         g = self.loss_function.g(pred, y)
         h = self.loss_function.h(pred, y)
-        G_H = [np.sum(g, axis=0), np.sum(h, axis=0)]
+        G_H = [np.sum(g, axis=0)[0], np.sum(h, axis=0)[0]]
         assert 0 < len(y.shape) <= 2, f"y.shape has some error,just support 2D or 1D, y.shape ={y.shape}"
-        assert len(x.shape) == 2, f"x.shape has some error,just support 2D or 1D, x.shape ={x.shape}"
+        assert len(x.shape) == 3, f"x.shape has some error,just support 2D or 1D, x.shape ={x.shape}"
 
         if len(y.shape) == 1:
             g = np.expand_dims(g, axis=1)
             h = np.expand_dims(h, axis=1)
 
-        g = np.take_along_axis(g, x, axis=0)
-        h = np.take_along_axis(h, x, axis=0)
+        g = np.take_along_axis(g, x[..., 0], axis=0)
+
+        h = np.take_along_axis(h, x[..., 0], axis=0)
 
         return g, h, G_H
 
+    @timer_decorator
     def train(self, x, y, pred):
         g, h, G_H = self.compute_g_h(x, y, pred)
         self.root_node = Node(self.model_args.max_depth, pred.shape, self.model_args)
@@ -260,66 +274,77 @@ class Xgboost:
         self.model_args = agrs
         self.trees = []
 
+    @timer_decorator
+    def rebuild_x(self, x):
+        x_sort = np.expand_dims(np.argsort(x, 0), -1)
+        result = np.empty(shape=x.shape + (1,))
+        for col in range(x.shape[1]):
+            unique_vals, inverse = np.unique(x[:, col], return_inverse=True)
+            result[:, col, 0] = inverse
+        eq_matrix = np.take_along_axis(result, x_sort, 0)
+        x_sort = np.concatenate([x_sort, eq_matrix], axis=-1).astype(int)
+        return x_sort
+
+    @timer_decorator
     def train(self, x, y):
-        x_sort = np.argsort(x, 0)
+        x_sort = self.rebuild_x(x)
         pred = np.zeros(y.shape)
         for tree in range(self.model_args.tree_nums):
             model = XgboostTree(self.model_args)
-            pred = pred + self.model_args.lr * model.train(x_sort, y, pred)
+            new_pred = self.model_args.lr * model.train(x_sort, y, pred)
+            pred = pred + new_pred
             loss = MseLoss.forward(pred, y).mean()
             print(loss)
             model.get_split_value(x)
-            # show_node(model.root_node)
             self.trees.append(model)
         return pred
 
     def predict(self, x):
         pred = np.zeros(x.shape[0])
         for tree in self.trees:
-            pred = pred + self.model_args.lr * tree.predict(x)
+            new_pred = self.model_args.lr * tree.predict(x)
+            pred = pred + new_pred
         return pred
 
 
 if __name__ == '__main__':
-    # data = pd.read_csv("../data/motor_hetero_guest.csv")
-    # x = data.values[:, 2:]
-    # y = data.values[:, 1:2]
-    #
-    sample = (200000, 50)
-    x = np.random.random_sample(sample)
-    y = np.random.random_sample((sample[0], 1))
+    import numpy as np
+    import pandas as pd
 
-    model = Xgboost(ModelArgs())
+    data = pd.read_csv("../data/motor_hetero_guest.csv")
+    x = data.values[:, 2:]
+    y = data.values[:, 1:2]
+
+    # size = 200000
+    # x = np.random.random_sample((size,50))
+    # y = np.random.random_sample((size,1))
+
+    args = ModelArgs()
+    model = Xgboost(args)
     p = model.train(x, y)
-    # print(y[0:10])
-    # print(p[0:10,0])
-    # print("*" * 100)
-    # pred = model.predict(x).reshape((-1,1))
-    # print(pred[0:10,0])
-    # loss = MseLoss.forward(pred, y).mean()
-    # print(loss)
+    pred = model.predict(x).reshape((-1, 1))
+    loss = MseLoss.forward(pred, y).mean()
+    print("predictloss", loss)
+    # print("pred 0", pred[0])
+    index = pred != p
+    print(sum(index))
+    import matplotlib.pyplot as plt
 
-    # # sample = (200000,50)
-    # # x = np.random.random_sample(sample)
-    # # y = np.random.random_sample(sample[0])
-    #
-    # import matplotlib.pyplot as plt
-    #
-    # # 准备数据
-    # shape = 200
-    # x = list(range(0, len(y[0:shape])))
-    # # 创建折线图
-    # plt.figure(figsize=(12, 6))
-    # plt.bar(x, y[0:shape], color="red")
-    # plt.plot(x, pred[0:shape], color="blue")
-    # # 添加标题和轴标签
-    # plt.title("Simple Line Chart")
-    # plt.xlabel("x values")
-    # plt.ylabel("y values (x squared)")
-    #
-    # # 显示网格
-    # plt.grid(True)
-    #
-    # # 显示图表
-    # plt.show()
-    # plt.savefig("test.png")
+    # 准备数据
+    shape = 200
+    x = list(range(0, len(y[0:shape])))
+    # 创建折线图
+    plt.figure(figsize=(12, 6))
+    plt.bar(x, y[0:shape].flatten(), color="red")
+    plt.plot(x, pred[0:shape].flatten(), color="blue")
+    # 添加标题和轴标签
+    plt.title("Simple Line Chart")
+    plt.xlabel("x values")
+    plt.ylabel("y values (x squared)")
+
+    # 显示网格
+    plt.grid(True)
+
+    # 显示图表
+    plt.show()
+    plt.savefig("test.png")
