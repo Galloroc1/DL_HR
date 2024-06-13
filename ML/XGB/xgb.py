@@ -1,31 +1,9 @@
 import numpy as np
 import sys
-
-sys.path.append("../../fl")
 from dataclasses import dataclass
 from copy import deepcopy
-from tools import timer_decorator
-
+from loss import MseLoss
 np.set_printoptions(precision=15)
-
-
-class MseLoss:
-
-    @classmethod
-    def g(cls, y_pred, y_true):
-        return y_pred - y_true
-
-    @classmethod
-    def h(cls, y_pred, y_true):
-        return np.ones(shape=y_true.shape)
-
-    @classmethod
-    def forward(cls, y_pred: np.ndarray, y_true: np.ndarray):
-        return 1 / 2 * (y_true - y_pred) ** 2
-
-    @classmethod
-    def g_h(cls, y_pred, y_true):
-        return np.array([y_pred - y_true, np.ones(shape=y_true.shape)]).T
 
 
 @dataclass
@@ -245,7 +223,6 @@ class XgboostTree:
             h = np.expand_dims(h, axis=1)
 
         g = np.take_along_axis(g, x[..., 0], axis=0)
-
         h = np.take_along_axis(h, x[..., 0], axis=0)
 
         return g, h, G_H
@@ -305,6 +282,7 @@ class Xgboost:
             new_pred = self.model_args.lr * tree.predict(x)
             pred = pred + new_pred
         return pred
+
 
 
 if __name__ == '__main__':
